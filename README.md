@@ -122,8 +122,6 @@ Sales--Data-Analysis/
 ├── ⚖️ LICENSE
 └── 📄 project Data new.xlsx
 
-«⚠️ If "project Data new.xlsx" is not uploaded to the repository, remove it from the structure above and keep the dataset requirement note instead.»
-
 ---
 
 ▶️ How to Run
