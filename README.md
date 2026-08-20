@@ -55,11 +55,11 @@ The analysis uses fields such as:
 
 ⚠️ Dataset Requirement
 
-The notebook currently loads the Excel dataset using a local Windows file path:
+By default the notebook loads the Excel dataset file named "project Data new.xlsx" from the repository root.
 
-"project Data new.xlsx"
+Place project Data new.xlsx in the repository root, or update the path inside Sales_Analysis.ipynb before running. The notebook reads the file with:
 
-Make sure the dataset is available and update the file path in the notebook before running it.
+df = pd.read_excel("project Data new.xlsx")
 
 ---
 
@@ -132,7 +132,7 @@ Download the project from GitHub.
 
 2️⃣ Install the required libraries
 
-pip install pandas numpy matplotlib seaborn openpyxl jupyter
+pip install -r requirements.txt
 
 3️⃣ Open the notebook
 
@@ -144,9 +144,7 @@ using Jupyter Notebook, JupyterLab, or another compatible notebook environment.
 
 4️⃣ Set the dataset path
 
-Update the Excel file path in the notebook:
-
-df = pd.read_excel("project Data new.xlsx")
+By default Sales_Analysis.ipynb attempts to load "project Data new.xlsx" from the repository root. If you store the dataset in a different folder, update the path in the notebook accordingly.
 
 5️⃣ Run the notebook
 
