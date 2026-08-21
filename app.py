@@ -21,7 +21,10 @@ st.set_page_config(
 # DATA FILE PATH
 # ============================================================
 
-DATA_FILE = Path(__file__).resolve().parent / "project Data new.xlsx"
+DATA_FILE = (
+    Path(__file__).resolve().parent
+    / "project Data new.xlsx"
+)
 
 
 # ============================================================
@@ -50,12 +53,13 @@ def load_data():
     try:
         df = pd.read_excel(
             DATA_FILE,
-            engine="openpyxl"
+            engine="openpyxl",
         )
 
     except Exception as exc:
         st.error(
-            f"Could not read '{DATA_FILE.name}'. Error: {exc}"
+            f"Could not read '{DATA_FILE.name}'. "
+            f"Error: {exc}"
         )
         st.stop()
 
@@ -135,9 +139,11 @@ def load_data():
     # Remove completely empty rows
     # --------------------------------------------------------
 
-    df = df.dropna(
-        how="all"
-    ).reset_index(drop=True)
+    df = (
+        df
+        .dropna(how="all")
+        .reset_index(drop=True)
+    )
 
     # --------------------------------------------------------
     # Clean text columns
@@ -190,7 +196,7 @@ def load_data():
     for column in ["Orders", "Amount"]:
         df[column] = pd.to_numeric(
             df[column],
-            errors="coerce"
+            errors="coerce",
         ).fillna(0)
 
     return df
@@ -213,7 +219,7 @@ st.sidebar.title("🎛️ Dashboard Filters")
 
 if st.sidebar.button(
     "🔄 Reset Filters",
-    use_container_width=True
+    use_container_width=True,
 ):
     st.session_state.clear()
     st.rerun()
@@ -225,7 +231,7 @@ if st.sidebar.button(
 
 dark_mode = st.sidebar.checkbox(
     "🌙 Dark Mode",
-    value=True
+    value=True,
 )
 
 
@@ -256,7 +262,7 @@ if selected_zones:
     state_options = sorted(
         df.loc[
             df["Zone"].isin(selected_zones),
-            "State"
+            "State",
         ]
         .dropna()
         .unique()
@@ -358,48 +364,76 @@ selected_marital = st.sidebar.multiselect(
 filtered = df.copy()
 
 
+# ------------------------------------------------------------
 # Zone
+# ------------------------------------------------------------
+
 if selected_zones:
+
     filtered = filtered[
         filtered["Zone"].isin(selected_zones)
     ]
+
 else:
+
     filtered = filtered.iloc[0:0]
 
 
+# ------------------------------------------------------------
 # State
+# ------------------------------------------------------------
+
 if selected_states:
+
     filtered = filtered[
         filtered["State"].isin(selected_states)
     ]
+
 else:
+
     filtered = filtered.iloc[0:0]
 
 
+# ------------------------------------------------------------
 # Age Group
+# ------------------------------------------------------------
+
 if selected_ages:
+
     filtered = filtered[
         filtered["Age_Group"].isin(selected_ages)
     ]
+
 else:
+
     filtered = filtered.iloc[0:0]
 
 
+# ------------------------------------------------------------
 # Gender
+# ------------------------------------------------------------
+
 if selected_gender != "All":
+
     filtered = filtered[
         filtered["Gender"] == selected_gender
     ]
 
 
+# ------------------------------------------------------------
 # Marital Status
+# ------------------------------------------------------------
+
 if selected_marital:
+
     filtered = filtered[
         filtered["Marital_Status"].isin(
             selected_marital
         )
     ]
+
 else:
+
     filtered = filtered.iloc[0:0]
 
 
@@ -414,9 +448,9 @@ template = (
 )
 
 
-# ------------------------------------------------------------
-# Dark Theme
-# ------------------------------------------------------------
+# ============================================================
+# CUSTOM CSS
+# ============================================================
 
 if dark_mode:
 
@@ -428,45 +462,41 @@ if dark_mode:
             background-color: #0e1117;
         }
 
-        /* KPI Cards */
-        div[data-testid="stMetric"] {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            padding: 18px;
-            border-radius: 12px;
-        }
-
-        div[data-testid="stMetricLabel"] {
-            color: #ffffff !important;
-        }
-
-        div[data-testid="stMetricValue"] {
-            color: #ffffff !important;
-        }
-
-        div[data-testid="stMetricDelta"] {
-            color: #ffffff !important;
-        }
-
-        /* Sidebar */
         section[data-testid="stSidebar"] {
             background-color: #161b22;
         }
 
-        /* Headers */
         h1, h2, h3 {
             color: #ffffff;
+        }
+
+        /* KPI CARDS */
+
+        .kpi-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 18px;
+            min-height: 105px;
+        }
+
+        .kpi-title {
+            color: #c9d1d9;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .kpi-value {
+            color: #ffffff;
+            font-size: 26px;
+            font-weight: 700;
         }
 
         </style>
         """,
         unsafe_allow_html=True,
     )
-
-
-# ------------------------------------------------------------
-# Light Theme
-# ------------------------------------------------------------
 
 else:
 
@@ -478,24 +508,27 @@ else:
             background-color: #ffffff;
         }
 
-        /* KPI Cards */
-        div[data-testid="stMetric"] {
+        /* KPI CARDS */
+
+        .kpi-card {
             background-color: #f8f9fa;
             border: 1px solid #e5e7eb;
-            padding: 18px;
             border-radius: 12px;
+            padding: 18px;
+            min-height: 105px;
         }
 
-        div[data-testid="stMetricLabel"] {
-            color: #374151 !important;
+        .kpi-title {
+            color: #374151;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 10px;
         }
 
-        div[data-testid="stMetricValue"] {
-            color: #111827 !important;
-        }
-
-        div[data-testid="stMetricDelta"] {
-            color: #374151 !important;
+        .kpi-value {
+            color: #111827;
+            font-size: 26px;
+            font-weight: 700;
         }
 
         </style>
@@ -541,24 +574,47 @@ aov = (
 c1, c2, c3, c4 = st.columns(4)
 
 
-c1.metric(
-    "💰 Total Revenue",
-    f"₹{revenue:,.2f}"
+c1.markdown(
+    f"""
+    <div class="kpi-card">
+        <div class="kpi-title">💰 Total Revenue</div>
+        <div class="kpi-value">₹{revenue:,.2f}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-c2.metric(
-    "📦 Total Orders",
-    f"{int(orders):,}"
+
+c2.markdown(
+    f"""
+    <div class="kpi-card">
+        <div class="kpi-title">📦 Total Orders</div>
+        <div class="kpi-value">{int(orders):,}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-c3.metric(
-    "👥 Unique Customers",
-    f"{customers:,}"
+
+c3.markdown(
+    f"""
+    <div class="kpi-card">
+        <div class="kpi-title">👥 Unique Customers</div>
+        <div class="kpi-value">{customers:,}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-c4.metric(
-    "🧾 Average Order Value",
-    f"₹{aov:,.2f}"
+
+c4.markdown(
+    f"""
+    <div class="kpi-card">
+        <div class="kpi-title">🧾 Average Order Value</div>
+        <div class="kpi-value">₹{aov:,.2f}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -593,7 +649,7 @@ else:
         filtered
         .groupby(
             ["Age_Group", "Gender"],
-            as_index=False
+            as_index=False,
         )
         .agg(
             Orders=("Orders", "sum"),
@@ -609,7 +665,7 @@ else:
 
 
     # --------------------------------------------------------
-    # Total Orders by Age Group & Gender
+    # Total Orders
     # --------------------------------------------------------
 
     fig1 = px.bar(
@@ -634,12 +690,12 @@ else:
 
     left.plotly_chart(
         fig1,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
     # --------------------------------------------------------
-    # Total Revenue by Age Group & Gender
+    # Total Revenue
     # --------------------------------------------------------
 
     fig2 = px.bar(
@@ -664,7 +720,7 @@ else:
 
     right.plotly_chart(
         fig2,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -690,12 +746,12 @@ else:
         filtered
         .groupby(
             "Zone",
-            as_index=False
+            as_index=False,
         )["Amount"]
         .sum()
         .sort_values(
             "Amount",
-            ascending=False
+            ascending=False,
         )
     )
 
@@ -711,13 +767,12 @@ else:
 
     fig3.update_traces(
         textposition="inside",
-        textinfo="percent"
+        textinfo="percent",
     )
-
 
     left.plotly_chart(
         fig3,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -729,12 +784,12 @@ else:
         filtered
         .groupby(
             "Marital_Status",
-            as_index=False
+            as_index=False,
         )["Amount"]
         .sum()
         .sort_values(
             "Amount",
-            ascending=False
+            ascending=False,
         )
     )
 
@@ -750,13 +805,12 @@ else:
 
     fig4.update_traces(
         textposition="inside",
-        textinfo="percent"
+        textinfo="percent",
     )
-
 
     right.plotly_chart(
         fig4,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -794,29 +848,31 @@ else:
         sector_data
         .sort_values(
             "Total_Orders",
-            ascending=False
+            ascending=False,
         )
     )
 
 
     fig5 = px.bar(
         sector_total_orders,
-        x="Sector",
-        y="Total_Orders",
+        x="Total_Orders",
+        y="Sector",
+        orientation="h",
         title="Sector-wise Total Orders",
         template=template,
     )
 
     fig5.update_layout(
-        xaxis_title="Sector",
-        yaxis_title="Total Orders",
-        xaxis_tickangle=-45,
+        xaxis_title="Total Orders",
+        yaxis_title="Sector",
+        yaxis=dict(
+            autorange="reversed"
+        ),
     )
-
 
     left.plotly_chart(
         fig5,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -828,29 +884,31 @@ else:
         sector_data
         .sort_values(
             "Average_Orders",
-            ascending=False
+            ascending=False,
         )
     )
 
 
     fig6 = px.bar(
         sector_average_orders,
-        x="Sector",
-        y="Average_Orders",
+        x="Average_Orders",
+        y="Sector",
+        orientation="h",
         title="Sector-wise Average Orders per Record",
         template=template,
     )
 
     fig6.update_layout(
-        xaxis_title="Sector",
-        yaxis_title="Average Orders",
-        xaxis_tickangle=-45,
+        xaxis_title="Average Orders",
+        yaxis_title="Sector",
+        yaxis=dict(
+            autorange="reversed"
+        ),
     )
-
 
     right.plotly_chart(
         fig6,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -876,12 +934,12 @@ else:
         filtered
         .groupby(
             "State",
-            as_index=False
+            as_index=False,
         )["Amount"]
         .sum()
         .sort_values(
             "Amount",
-            ascending=False
+            ascending=False,
         )
         .head(10)
     )
@@ -904,72 +962,10 @@ else:
         yaxis_title="State",
     )
 
-
     left.plotly_chart(
         fig7,
-        use_container_width=True
+        use_container_width=True,
     )
 
 
-    # --------------------------------------------------------
-    # Top 10 Product Categories
-    # --------------------------------------------------------
-
-    product_data = (
-        filtered
-        .groupby(
-            "Product_Category",
-            as_index=False
-        )["Amount"]
-        .sum()
-        .sort_values(
-            "Amount",
-            ascending=False
-        )
-        .head(10)
-    )
-
-
-    fig8 = px.bar(
-        product_data,
-        x="Amount",
-        y="Product_Category",
-        orientation="h",
-        title="Top 10 Product Categories by Revenue (₹)",
-        template=template,
-    )
-
-    fig8.update_layout(
-        yaxis=dict(
-            autorange="reversed"
-        ),
-        xaxis_title="Amount (₹)",
-        yaxis_title="Product Category",
-    )
-
-
-    right.plotly_chart(
-        fig8,
-        use_container_width=True
-    )
-
-
-    st.divider()
-
-
-    # ========================================================
-    # 5. PRODUCT CATEGORY ORDERS
-    # ========================================================
-
-    st.subheader(
-        "🛍️ Product Category Orders"
-    )
-
-    left, right = st.columns(2)
-
-
-    product_orders = (
-        filtered
-        .groupby("Product_Category")
-        .agg(
-       
+    # ---------------------------------------
