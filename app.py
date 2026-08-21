@@ -18,10 +18,10 @@ st.set_page_config(
 
 
 # ============================================================
-# DATA FILE
+# DATA FILE PATH
 # ============================================================
 
-DATA_FILE = Path(__file__).parent / "project Data new.xlsx"
+DATA_FILE = Path(__file__).resolve().parent / "project Data new.xlsx"
 
 
 # ============================================================
@@ -32,14 +32,15 @@ DATA_FILE = Path(__file__).parent / "project Data new.xlsx"
 def load_data():
     """Load and clean the sales dataset."""
 
+    # Check whether dataset exists
     if not DATA_FILE.exists():
         st.error(
-            f"Dataset not found: {DATA_FILE.name}. "
-            "Make sure the Excel file is uploaded to the same repository "
-            "folder as app.py."
+            f"Dataset not found: '{DATA_FILE.name}'. "
+            "Make sure the Excel file is in the same folder as app.py."
         )
         st.stop()
 
+    # Read Excel file
     try:
         df = pd.read_excel(
             DATA_FILE,
@@ -47,17 +48,44 @@ def load_data():
         )
     except Exception as exc:
         st.error(
-            f"Could not read {DATA_FILE.name}: {exc}"
+            f"Could not read '{DATA_FILE.name}'. Error: {exc}"
         )
         st.stop()
 
+    # --------------------------------------------------------
     # Clean column names
+    # --------------------------------------------------------
+
     df.columns = [
-        str(col).strip()
-        for col in df.columns
+        str(column).strip()
+        for column in df.columns
     ]
 
-    # Rename columns
+    # --------------------------------------------------------
+    # Remove unnecessary columns
+    # --------------------------------------------------------
+
+    columns_to_drop = [
+        "Status",
+        "unnamed1",
+        "Unnamed: 14",
+    ]
+
+    existing_drop_columns = [
+        column
+        for column in columns_to_drop
+        if column in df.columns
+    ]
+
+    if existing_drop_columns:
+        df = df.drop(
+            columns=existing_drop_columns
+        )
+
+    # --------------------------------------------------------
+    # Standardize column names
+    # --------------------------------------------------------
+
     rename_map = {
         "Occupation": "Sector",
         "Age Group": "Age_Group",
@@ -69,40 +97,7 @@ def load_data():
     )
 
     # --------------------------------------------------------
-    # Marital Status Cleaning
-    # --------------------------------------------------------
-
-    if "Marital_Status" in df.columns:
-
-        df["Marital_Status"] = (
-            df["Marital_Status"]
-            .astype(str)
-            .str.strip()
-            .replace(
-                {
-                    "1": "Married",
-                    "0": "Single",
-                    "1.0": "Married",
-                    "0.0": "Single",
-                }
-            )
-        )
-
-    # --------------------------------------------------------
-    # Numeric Columns
-    # --------------------------------------------------------
-
-    for col in ["Orders", "Amount"]:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce"
-            ).fillna(0)
-
-    # --------------------------------------------------------
-    # Required Columns Check
+    # Check required columns
     # --------------------------------------------------------
 
     required_columns = {
@@ -123,18 +118,80 @@ def load_data():
     )
 
     if missing_columns:
-
         st.error(
-            "Missing required columns: "
+            "The dataset is missing these required columns: "
             + ", ".join(missing_columns)
         )
-
         st.stop()
+
+    # --------------------------------------------------------
+    # Clean text columns
+    # --------------------------------------------------------
+
+    text_columns = [
+        "Gender",
+        "Age_Group",
+        "State",
+        "Zone",
+        "Sector",
+        "Product_Category",
+    ]
+
+    for column in text_columns:
+        df[column] = (
+            df[column]
+            .astype("string")
+            .str.strip()
+        )
+
+    # --------------------------------------------------------
+    # Clean Marital Status
+    # --------------------------------------------------------
+
+    # Keep numeric values intact before converting them
+    # to readable labels.
+    df["Marital_Status"] = (
+        df["Marital_Status"]
+        .replace(
+            {
+                1: "Married",
+                0: "Single",
+                1.0: "Married",
+                0.0: "Single",
+                "1": "Married",
+                "0": "Single",
+                "1.0": "Married",
+                "0.0": "Single",
+                "Married": "Married",
+                "Single": "Single",
+            }
+        )
+        .astype("string")
+        .str.strip()
+    )
+
+    # --------------------------------------------------------
+    # Convert numeric columns
+    # --------------------------------------------------------
+
+    for column in ["Orders", "Amount"]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce"
+        ).fillna(0)
+
+    # --------------------------------------------------------
+    # Remove completely empty rows
+    # --------------------------------------------------------
+
+    df = df.dropna(
+        how="all"
+    ).reset_index(drop=True)
 
     return df
 
 
-# Load dataset
+# Load data
 df = load_data()
 
 
@@ -149,10 +206,11 @@ st.sidebar.title("🎛️ Dashboard Filters")
 # Reset Filters
 # ------------------------------------------------------------
 
-if st.sidebar.button("🔄 Reset Filters"):
-
+if st.sidebar.button(
+    "🔄 Reset Filters",
+    use_container_width=True
+):
     st.session_state.clear()
-
     st.rerun()
 
 
@@ -179,7 +237,7 @@ zones = sorted(
 
 selected_zones = st.sidebar.multiselect(
     "Zone",
-    zones,
+    options=zones,
     default=zones,
 )
 
@@ -207,7 +265,7 @@ else:
 
 selected_states = st.sidebar.multiselect(
     "State",
-    state_options,
+    options=state_options,
     default=state_options,
 )
 
@@ -226,14 +284,11 @@ age_order = [
     "55+",
 ]
 
-
 available_ages = set(
     df["Age_Group"]
     .dropna()
-    .astype(str)
     .unique()
 )
-
 
 age_options = [
     age
@@ -241,16 +296,17 @@ age_options = [
     if age in available_ages
 ]
 
-
-# Include unexpected age groups if they exist
-age_options += sorted(
+# Add any unexpected age groups
+extra_ages = sorted(
     available_ages - set(age_options)
 )
+
+age_options.extend(extra_ages)
 
 
 selected_ages = st.sidebar.multiselect(
     "Age Group",
-    age_options,
+    options=age_options,
     default=age_options,
 )
 
@@ -266,10 +322,9 @@ gender_options = sorted(
     .tolist()
 )
 
-
 selected_gender = st.sidebar.radio(
     "Gender",
-    ["All"] + gender_options,
+    options=["All"] + gender_options,
     index=0,
 )
 
@@ -285,16 +340,15 @@ marital_options = sorted(
     .tolist()
 )
 
-
 selected_marital = st.sidebar.multiselect(
     "Marital Status",
-    marital_options,
+    options=marital_options,
     default=marital_options,
 )
 
 
 # ============================================================
-# FILTER DATA
+# APPLY FILTERS
 # ============================================================
 
 filtered = df.copy()
@@ -302,58 +356,46 @@ filtered = df.copy()
 
 # Zone
 if selected_zones:
-
     filtered = filtered[
-        filtered["Zone"].isin(
-            selected_zones
-        )
+        filtered["Zone"].isin(selected_zones)
     ]
-
 else:
-
     filtered = filtered.iloc[0:0]
 
 
 # State
 if selected_states:
-
     filtered = filtered[
-        filtered["State"].isin(
-            selected_states
-        )
+        filtered["State"].isin(selected_states)
     ]
+else:
+    filtered = filtered.iloc[0:0]
 
 
 # Age Group
 if selected_ages:
-
     filtered = filtered[
-        filtered["Age_Group"].isin(
-            selected_ages
-        )
+        filtered["Age_Group"].isin(selected_ages)
     ]
+else:
+    filtered = filtered.iloc[0:0]
 
 
 # Gender
 if selected_gender != "All":
-
     filtered = filtered[
-        filtered["Gender"]
-        == selected_gender
+        filtered["Gender"] == selected_gender
     ]
 
 
 # Marital Status
 if selected_marital:
-
     filtered = filtered[
         filtered["Marital_Status"].isin(
             selected_marital
         )
     ]
-
 else:
-
     filtered = filtered.iloc[0:0]
 
 
@@ -423,7 +465,7 @@ st.caption(
 
 
 # ============================================================
-# KPI
+# KPI CARDS
 # ============================================================
 
 revenue = filtered["Amount"].sum()
@@ -434,7 +476,7 @@ customers = filtered["User_ID"].nunique()
 
 aov = (
     revenue / orders
-    if orders
+    if orders > 0
     else 0
 )
 
@@ -447,18 +489,15 @@ c1.metric(
     f"₹{revenue:,.2f}"
 )
 
-
 c2.metric(
     "📦 Total Orders",
     f"{int(orders):,}"
 )
 
-
 c3.metric(
     "👥 Unique Customers",
     f"{customers:,}"
 )
-
 
 c4.metric(
     "🧾 Average Order Value",
@@ -476,14 +515,14 @@ st.divider()
 if filtered.empty:
 
     st.warning(
-        "No data matches the selected filters. "
-        "Please change the filters."
+        "⚠️ No data matches the selected filters. "
+        "Please adjust your selections in the sidebar."
     )
 
 else:
 
     # ========================================================
-    # AGE GROUP & GENDER
+    # 1. AGE GROUP & GENDER
     # ========================================================
 
     st.subheader(
@@ -512,10 +551,7 @@ else:
     }
 
 
-    # --------------------------------------------------------
-    # Orders by Age Group & Gender
-    # --------------------------------------------------------
-
+    # Orders
     fig1 = px.bar(
         age_gender,
         x="Age_Group",
@@ -526,10 +562,9 @@ else:
             "Age_Group": age_order
         },
         color_discrete_map=gender_colors,
-        title="Orders by Age Group & Gender",
+        title="Total Orders by Age Group & Gender",
         template=template,
     )
-
 
     left.plotly_chart(
         fig1,
@@ -537,10 +572,7 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Amount by Age Group & Gender
-    # --------------------------------------------------------
-
+    # Revenue
     fig2 = px.bar(
         age_gender,
         x="Age_Group",
@@ -551,10 +583,9 @@ else:
             "Age_Group": age_order
         },
         color_discrete_map=gender_colors,
-        title="Amount by Age Group & Gender",
+        title="Total Revenue (₹) by Age Group & Gender",
         template=template,
     )
-
 
     right.plotly_chart(
         fig2,
@@ -566,21 +597,17 @@ else:
 
 
     # ========================================================
-    # ZONE & MARITAL STATUS
+    # 2. ZONE & MARITAL STATUS
     # ========================================================
 
     st.subheader(
         "📍 Zone & Marital Status"
     )
 
-
     left, right = st.columns(2)
 
 
-    # --------------------------------------------------------
     # Zone Revenue
-    # --------------------------------------------------------
-
     zone_data = (
         filtered
         .groupby(
@@ -600,7 +627,7 @@ else:
         names="Zone",
         values="Amount",
         hole=0.45,
-        title="Zone-wise Revenue",
+        title="Zone-wise Revenue Contribution",
         template=template,
     )
 
@@ -611,10 +638,7 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Marital Status Revenue
-    # --------------------------------------------------------
-
+    # Marital Revenue
     marital_data = (
         filtered
         .groupby(
@@ -622,6 +646,10 @@ else:
             as_index=False
         )["Amount"]
         .sum()
+        .sort_values(
+            "Amount",
+            ascending=False
+        )
     )
 
 
@@ -630,7 +658,7 @@ else:
         names="Marital_Status",
         values="Amount",
         hole=0.45,
-        title="Marital Status Revenue",
+        title="Marital Status Revenue Contribution",
         template=template,
     )
 
@@ -645,13 +673,12 @@ else:
 
 
     # ========================================================
-    # SECTOR PERFORMANCE
+    # 3. SECTOR PERFORMANCE
     # ========================================================
 
     st.subheader(
         "🏢 Sector Performance"
     )
-
 
     left, right = st.columns(2)
 
@@ -665,6 +692,12 @@ else:
             Total_Amount=("Amount", "sum"),
         )
         .reset_index()
+    )
+
+
+    # Total Orders
+    sector_total_orders = (
+        sector_data
         .sort_values(
             "Total_Orders",
             ascending=False
@@ -672,12 +705,8 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Sector Total Orders
-    # --------------------------------------------------------
-
     fig5 = px.bar(
-        sector_data,
+        sector_total_orders,
         x="Sector",
         y="Total_Orders",
         title="Sector-wise Total Orders",
@@ -696,18 +725,21 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Sector Average Orders
-    # --------------------------------------------------------
-
-    fig6 = px.bar(
-        sector_data.sort_values(
+    # Average Orders
+    sector_average_orders = (
+        sector_data
+        .sort_values(
             "Average_Orders",
             ascending=False
-        ),
+        )
+    )
+
+
+    fig6 = px.bar(
+        sector_average_orders,
         x="Sector",
         y="Average_Orders",
-        title="Sector-wise Average Orders",
+        title="Sector-wise Average Orders per Record",
         template=template,
     )
 
@@ -727,21 +759,17 @@ else:
 
 
     # ========================================================
-    # TOP STATES & PRODUCT CATEGORIES
+    # 4. TOP STATES & PRODUCT CATEGORIES
     # ========================================================
 
     st.subheader(
         "🏆 Top States & Product Categories"
     )
 
-
     left, right = st.columns(2)
 
 
-    # --------------------------------------------------------
     # Top 10 States
-    # --------------------------------------------------------
-
     top_states = (
         filtered
         .groupby(
@@ -762,7 +790,7 @@ else:
         x="Amount",
         y="State",
         orientation="h",
-        title="Top 10 States by Revenue",
+        title="Top 10 States by Revenue (₹)",
         template=template,
     )
 
@@ -780,10 +808,7 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Top Product Categories
-    # --------------------------------------------------------
-
+    # Top 10 Product Categories
     product_data = (
         filtered
         .groupby(
@@ -804,7 +829,7 @@ else:
         x="Amount",
         y="Product_Category",
         orientation="h",
-        title="Top 10 Product Categories by Revenue",
+        title="Top 10 Product Categories by Revenue (₹)",
         template=template,
     )
 
@@ -826,13 +851,12 @@ else:
 
 
     # ========================================================
-    # PRODUCT CATEGORY ORDERS
+    # 5. PRODUCT CATEGORY ORDERS
     # ========================================================
 
     st.subheader(
         "🛍️ Product Category Orders"
     )
-
 
     left, right = st.columns(2)
 
@@ -848,10 +872,7 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Product Category Total Orders
-    # --------------------------------------------------------
-
+    # Top 10 by Total Orders
     product_total_orders = (
         product_orders
         .sort_values(
@@ -866,7 +887,7 @@ else:
         product_total_orders,
         x="Product_Category",
         y="Total_Orders",
-        title="Top 10 Product Categories by Total Orders",
+        title="Top 10 Categories by Total Orders",
         template=template,
     )
 
@@ -882,10 +903,7 @@ else:
     )
 
 
-    # --------------------------------------------------------
-    # Product Category Average Orders
-    # --------------------------------------------------------
-
+    # Top 10 by Average Orders
     product_average_orders = (
         product_orders
         .sort_values(
@@ -900,7 +918,7 @@ else:
         product_average_orders,
         x="Product_Category",
         y="Average_Orders",
-        title="Top 10 Product Categories by Average Orders",
+        title="Top 10 Categories by Average Orders",
         template=template,
     )
 
@@ -920,11 +938,11 @@ else:
 
 
     # ========================================================
-    # SECTOR TOTAL AMOUNT
+    # 6. SECTOR TOTAL REVENUE
     # ========================================================
 
     st.subheader(
-        "💰 Sector-wise Total Amount"
+        "💰 Sector-wise Total Revenue"
     )
 
 
@@ -946,7 +964,7 @@ else:
         sector_amount,
         x="Sector",
         y="Amount",
-        title="Sector-wise Total Revenue",
+        title="Sector-wise Total Revenue (₹)",
         template=template,
     )
 
@@ -966,7 +984,7 @@ else:
 
 
     # ========================================================
-    # RAW DATA
+    # 7. FILTERED RAW DATA
     # ========================================================
 
     st.subheader(
@@ -992,10 +1010,10 @@ else:
 
 
         st.download_button(
-            "⬇️ Download Filtered CSV",
-            csv,
-            "sales_filtered.csv",
-            "text/csv",
+            label="⬇️ Download Filtered CSV",
+            data=csv,
+            file_name="sales_filtered.csv",
+            mime="text/csv",
         )
 
 
