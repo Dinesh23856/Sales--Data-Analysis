@@ -47,7 +47,7 @@ def load_data():
         st.stop()
 
     # --------------------------------------------------------
-    # Read Excel
+    # Read Excel file
     # --------------------------------------------------------
 
     try:
@@ -58,8 +58,7 @@ def load_data():
 
     except Exception as exc:
         st.error(
-            f"Could not read '{DATA_FILE.name}'. "
-            f"Error: {exc}"
+            f"Could not read '{DATA_FILE.name}'. Error: {exc}"
         )
         st.stop()
 
@@ -169,22 +168,24 @@ def load_data():
     # Clean Marital Status
     # --------------------------------------------------------
 
+    marital_map = {
+        1: "Married",
+        0: "Single",
+        1.0: "Married",
+        0.0: "Single",
+        "1": "Married",
+        "0": "Single",
+        "1.0": "Married",
+        "0.0": "Single",
+        "Married": "Married",
+        "married": "Married",
+        "Single": "Single",
+        "single": "Single",
+    }
+
     df["Marital_Status"] = (
         df["Marital_Status"]
-        .replace(
-            {
-                1: "Married",
-                0: "Single",
-                1.0: "Married",
-                0.0: "Single",
-                "1": "Married",
-                "0": "Single",
-                "1.0": "Married",
-                "0.0": "Single",
-                "Married": "Married",
-                "Single": "Single",
-            }
-        )
+        .replace(marital_map)
         .astype("string")
         .str.strip()
     )
@@ -202,7 +203,10 @@ def load_data():
     return df
 
 
-# Load data
+# ============================================================
+# LOAD DATA
+# ============================================================
+
 df = load_data()
 
 
@@ -467,30 +471,7 @@ if dark_mode:
         }
 
         h1, h2, h3 {
-            color: #ffffff;
-        }
-
-        /* KPI CARDS */
-
-        .kpi-card {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            padding: 18px;
-            min-height: 105px;
-        }
-
-        .kpi-title {
-            color: #c9d1d9;
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .kpi-value {
-            color: #ffffff;
-            font-size: 26px;
-            font-weight: 700;
+            color: #ffffff !important;
         }
 
         </style>
@@ -508,27 +489,8 @@ else:
             background-color: #ffffff;
         }
 
-        /* KPI CARDS */
-
-        .kpi-card {
-            background-color: #f8f9fa;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 18px;
-            min-height: 105px;
-        }
-
-        .kpi-title {
-            color: #374151;
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .kpi-value {
-            color: #111827;
-            font-size: 26px;
-            font-weight: 700;
+        h1, h2, h3 {
+            color: #111827 !important;
         }
 
         </style>
@@ -571,50 +533,96 @@ aov = (
 # KPI CARDS
 # ============================================================
 
-c1, c2, c3, c4 = st.columns(4)
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
 
-c1.markdown(
-    f"""
-    <div class="kpi-card">
-        <div class="kpi-title">💰 Total Revenue</div>
-        <div class="kpi-value">₹{revenue:,.2f}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+if dark_mode:
+
+    card_bg = "#161b22"
+    card_border = "#30363d"
+    title_color = "#c9d1d9"
+    value_color = "#ffffff"
+
+else:
+
+    card_bg = "#f8f9fa"
+    card_border = "#e5e7eb"
+    title_color = "#374151"
+    value_color = "#111827"
+
+
+def kpi_card(
+    column,
+    icon,
+    title,
+    value,
+):
+    """Display a custom KPI card."""
+
+    with column:
+
+        st.markdown(
+            f"""
+            <div style="
+                background-color: {card_bg};
+                border: 1px solid {card_border};
+                border-radius: 12px;
+                padding: 18px;
+                min-height: 110px;
+                box-sizing: border-box;
+                margin-bottom: 10px;
+            ">
+
+                <div style="
+                    color: {title_color};
+                    font-size: 15px;
+                    font-weight: 600;
+                    margin-bottom: 10px;
+                ">
+                    {icon} {title}
+                </div>
+
+                <div style="
+                    color: {value_color};
+                    font-size: 25px;
+                    font-weight: 700;
+                    line-height: 1.2;
+                ">
+                    {value}
+                </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+kpi_card(
+    kpi1,
+    "💰",
+    "Total Revenue",
+    f"₹{revenue:,.2f}",
 )
 
-
-c2.markdown(
-    f"""
-    <div class="kpi-card">
-        <div class="kpi-title">📦 Total Orders</div>
-        <div class="kpi-value">{int(orders):,}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+kpi_card(
+    kpi2,
+    "📦",
+    "Total Orders",
+    f"{int(orders):,}",
 )
 
-
-c3.markdown(
-    f"""
-    <div class="kpi-card">
-        <div class="kpi-title">👥 Unique Customers</div>
-        <div class="kpi-value">{customers:,}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+kpi_card(
+    kpi3,
+    "👥",
+    "Unique Customers",
+    f"{customers:,}",
 )
 
-
-c4.markdown(
-    f"""
-    <div class="kpi-card">
-        <div class="kpi-title">🧾 Average Order Value</div>
-        <div class="kpi-value">₹{aov:,.2f}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+kpi_card(
+    kpi4,
+    "🧾",
+    "Average Order Value",
+    f"₹{aov:,.2f}",
 )
 
 
@@ -665,7 +673,7 @@ else:
 
 
     # --------------------------------------------------------
-    # Total Orders
+    # Total Orders by Age Group & Gender
     # --------------------------------------------------------
 
     fig1 = px.bar(
@@ -695,7 +703,7 @@ else:
 
 
     # --------------------------------------------------------
-    # Total Revenue
+    # Total Revenue by Age Group & Gender
     # --------------------------------------------------------
 
     fig2 = px.bar(
@@ -770,6 +778,7 @@ else:
         textinfo="percent",
     )
 
+
     left.plotly_chart(
         fig3,
         use_container_width=True,
@@ -807,6 +816,7 @@ else:
         textposition="inside",
         textinfo="percent",
     )
+
 
     right.plotly_chart(
         fig4,
@@ -855,20 +865,18 @@ else:
 
     fig5 = px.bar(
         sector_total_orders,
-        x="Total_Orders",
-        y="Sector",
-        orientation="h",
+        x="Sector",
+        y="Total_Orders",
         title="Sector-wise Total Orders",
         template=template,
     )
 
     fig5.update_layout(
-        xaxis_title="Total Orders",
-        yaxis_title="Sector",
-        yaxis=dict(
-            autorange="reversed"
-        ),
+        xaxis_title="Sector",
+        yaxis_title="Total Orders",
+        xaxis_tickangle=-45,
     )
+
 
     left.plotly_chart(
         fig5,
@@ -891,20 +899,18 @@ else:
 
     fig6 = px.bar(
         sector_average_orders,
-        x="Average_Orders",
-        y="Sector",
-        orientation="h",
+        x="Sector",
+        y="Average_Orders",
         title="Sector-wise Average Orders per Record",
         template=template,
     )
 
     fig6.update_layout(
-        xaxis_title="Average Orders",
-        yaxis_title="Sector",
-        yaxis=dict(
-            autorange="reversed"
-        ),
+        xaxis_title="Sector",
+        yaxis_title="Average Orders",
+        xaxis_tickangle=-45,
     )
+
 
     right.plotly_chart(
         fig6,
@@ -962,10 +968,13 @@ else:
         yaxis_title="State",
     )
 
+
     left.plotly_chart(
         fig7,
         use_container_width=True,
     )
 
 
-    # ---------------------------------------
+    # --------------------------------------------------------
+    # Top 10 Product Categories
+    # --------------------------
