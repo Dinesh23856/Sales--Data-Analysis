@@ -1,526 +1,499 @@
-from pathlib import Path
-import pandas as pd
-import plotly.express as px
 import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
 
-# ============================================================
-# PAGE CONFIGURATION
-# ============================================================
-
+# ==========================================
+# 1. PAGE CONFIGURATION
+# ==========================================
 st.set_page_config(
     page_title="Sales Data Analysis Dashboard",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-# ============================================================
-# DATA FILE PATH
-# ============================================================
-
-DATA_FILE = Path(__file__).resolve().parent / "project Data new.xlsx"
-
-# ============================================================
-# LOAD AND CLEAN DATA
-# ============================================================
-
+# ==========================================
+# 2. DATA LOADING & CLEANING PIPELINE
+# ==========================================
 @st.cache_data
 def load_data():
-    """Load and clean the sales dataset."""
-    if not DATA_FILE.exists():
-        st.error(
-            f"Dataset not found: '{DATA_FILE.name}'. "
-            "Make sure the Excel file is in the same folder as app.py."
-        )
-        st.stop()
-
     try:
-        df = pd.read_excel(DATA_FILE, engine="openpyxl")
-    except Exception as exc:
-        st.error(f"Could not read '{DATA_FILE.name}'. Error: {exc}")
+        base_dir = Path(__file__).resolve().parent
+    except NameError:
+        base_dir = Path.cwd()
+        
+    file_path = base_dir / "project Data new.xlsx"
+    
+    if not file_path.exists():
+        file_path = Path("project Data new.xlsx")
+        
+    if not file_path.exists():
+        st.error(f"Dataset file not found at: {file_path.resolve()}. Please ensure 'project Data new.xlsx' is in the app directory.")
         st.stop()
 
+    df = pd.read_excel(file_path, engine="openpyxl")
+    
     # Clean column headers
-    df.columns = [str(col).strip() for col in df.columns]
-
-    # Drop redundant columns
-    columns_to_drop = ["Status", "unnamed1", "Unnamed: 14"]
-    existing_drop_columns = [col for col in columns_to_drop if col in df.columns]
-    if existing_drop_columns:
-        df = df.drop(columns=existing_drop_columns)
-
-    # Standardize column headers
-    rename_map = {
+    df.columns = df.columns.astype(str).str.strip()
+    
+    # Drop unnecessary columns if they exist
+    cols_to_drop = [c for c in ["unnamed1", "Status", "Unnamed: 0"] if c in df.columns]
+    if cols_to_drop:
+        df.drop(columns=cols_to_drop, inplace=True)
+        
+    # Standardize column names
+    rename_dict = {
         "Occupation": "Sector",
         "Age Group": "Age_Group",
-        "Product Category": "Product_Category",
+        "Product Category": "Product_Category"
     }
-    df = df.rename(columns=rename_map)
-
-    # Schema validation
-    required_columns = {
-        "User_ID",
-        "Gender",
-        "Age_Group",
-        "State",
-        "Zone",
-        "Sector",
-        "Product_Category",
-        "Orders",
-        "Amount",
-        "Marital_Status",
-    }
-    missing_columns = sorted(required_columns - set(df.columns))
-    if missing_columns:
-        st.error(
-            "The dataset is missing these required columns: "
-            + ", ".join(missing_columns)
-        )
-        st.stop()
-
-    # Drop blank rows
-    df = df.dropna(how="all").reset_index(drop=True)
-
-    # Clean text columns
-    text_columns = [
-        "Gender",
-        "Age_Group",
-        "State",
-        "Zone",
-        "Sector",
-        "Product_Category",
+    df.rename(columns={k: v for k, v in rename_dict.items() if k in df.columns}, inplace=True)
+    
+    # Required columns validation
+    required_cols = [
+        "User_ID", "Gender", "Age_Group", "Marital_Status", 
+        "State", "Zone", "Sector", "Product_Category", "Orders", "Amount"
     ]
-    for col in text_columns:
-        df[col] = (
-            df[col]
-            .astype("string")
-            .str.replace(r"\s+", " ", regex=True)
-            .str.strip()
-        )
-
-    # Standardize Gender
-    df["Gender"] = df["Gender"].str.upper().str.strip()
-
-    # Standardize Marital Status
-    marital_map = {
-        1: "Married",
-        0: "Single",
-        1.0: "Married",
-        0.0: "Single",
-        "1": "Married",
-        "0": "Single",
-        "1.0": "Married",
-        "0.0": "Single",
-        "Married": "Married",
-        "married": "Married",
-        "Single": "Single",
-        "single": "Single",
-    }
-    df["Marital_Status"] = (
-        df["Marital_Status"]
-        .replace(marital_map)
-        .astype("string")
-        .str.strip()
-    )
-
-    # Numeric conversion
-    for col in ["Orders", "Amount"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
+    missing_cols = [c for c in required_cols if c not in df.columns]
+    if missing_cols:
+        st.error(f"Missing required columns in dataset: {missing_cols}")
+        st.stop()
+        
+    # Strip string columns
+    string_cols = ["Gender", "Age_Group", "State", "Zone", "Sector", "Product_Category"]
+    for col in string_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+            
+    # Normalize Gender
+    gender_map = {"M": "M", "Male": "M", "F": "F", "Female": "F"}
+    df["Gender"] = df["Gender"].map(lambda x: gender_map.get(x, x))
+    
+    # Normalize Marital_Status
+    def clean_marital_status(val):
+        s = str(val).strip().lower()
+        if s in ["1", "1.0", "married"]:
+            return "Married"
+        elif s in ["0", "0.0", "single"]:
+            return "Single"
+        return str(val).strip()
+        
+    df["Marital_Status"] = df["Marital_Status"].apply(clean_marital_status)
+    
+    # Clean numeric fields
+    df["Orders"] = pd.to_numeric(df["Orders"], errors="coerce").fillna(0).astype(int)
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0.0)
+    
+    # Filter out rows with zero or null User_ID if any
+    df = df[df["User_ID"].notnull()].copy()
+    
     return df
 
-df = load_data()
+df_raw = load_data()
 
-# ============================================================
-# SIDEBAR FILTERS
-# ============================================================
+# ==========================================
+# 3. SIDEBAR FILTERS & THEME
+# ==========================================
+st.sidebar.title("Dashboard Filters")
 
-st.sidebar.title("🎛️ Dashboard Filters")
+# Theme selection
+dark_mode = st.sidebar.toggle("Dark Mode", value=True)
+plotly_template = "plotly_dark" if dark_mode else "plotly_white"
+bg_card_color = "#1E1E1E" if dark_mode else "#F8F9FA"
+text_color = "#FFFFFF" if dark_mode else "#111111"
 
-if st.sidebar.button("🔄 Reset Filters", use_container_width=True):
-    st.session_state.clear()
+# Reset filter handler
+if "filter_version" not in st.session_state:
+    st.session_state["filter_version"] = 0
+
+if st.sidebar.button("Reset Filters", use_container_width=True):
+    st.session_state["filter_version"] += 1
     st.rerun()
 
-dark_mode = st.sidebar.checkbox("🌙 Dark Mode", value=True)
+v_key = st.session_state["filter_version"]
 
-# 1. Zone Filter
-zones = sorted(df["Zone"].dropna().unique().tolist())
-selected_zones = st.sidebar.multiselect("Zone", options=zones, default=zones, key="zone_filter")
+# 1. Zone filter
+all_zones = sorted(df_raw["Zone"].dropna().unique().tolist())
+selected_zones = st.sidebar.multiselect(
+    "Select Zone:",
+    options=all_zones,
+    default=all_zones,
+    key=f"zone_{v_key}"
+)
 
-# 2. State Filter (Cascading)
-if selected_zones:
-    state_options = sorted(
-        df.loc[df["Zone"].isin(selected_zones), "State"]
-        .dropna()
-        .unique()
-        .tolist()
-    )
-else:
-    state_options = []
+# 2. Dynamic State filter based on Zone
+available_states = sorted(df_raw[df_raw["Zone"].isin(selected_zones)]["State"].dropna().unique().tolist()) if selected_zones else []
+selected_states = st.sidebar.multiselect(
+    "Select State:",
+    options=available_states,
+    default=available_states,
+    key=f"state_{v_key}"
+)
 
-selected_states = st.sidebar.multiselect("State", options=state_options, default=state_options, key="state_filter")
-
-# 3. Age Group Filter
+# 3. Age Group filter
 age_order = ["0-17", "18-25", "26-35", "36-45", "46-50", "51-55", "55+"]
-available_ages = set(df["Age_Group"].dropna().unique())
-age_options = [age for age in age_order if age in available_ages]
-extra_ages = sorted(available_ages - set(age_options))
-age_options.extend(extra_ages)
+raw_age_groups = [ag for ag in age_order if ag in df_raw["Age_Group"].unique()]
+other_age_groups = [ag for ag in df_raw["Age_Group"].unique() if ag not in age_order]
+all_age_groups = raw_age_groups + sorted(other_age_groups)
 
-selected_ages = st.sidebar.multiselect("Age Group", options=age_options, default=age_options, key="age_filter")
+selected_age_groups = st.sidebar.multiselect(
+    "Select Age Group:",
+    options=all_age_groups,
+    default=all_age_groups,
+    key=f"age_{v_key}"
+)
 
-# 4. Gender Filter
-gender_options = sorted(df["Gender"].dropna().unique().tolist())
-selected_gender = st.sidebar.radio("Gender", options=["All"] + gender_options, index=0, key="gender_filter")
+# 4. Gender filter
+gender_options = ["All"] + sorted([g for g in df_raw["Gender"].dropna().unique().tolist() if g in ["M", "F"]])
+selected_gender = st.sidebar.selectbox(
+    "Select Gender:",
+    options=gender_options,
+    index=0,
+    key=f"gender_{v_key}"
+)
 
-# 5. Marital Status Filter
-marital_options = sorted(df["Marital_Status"].dropna().unique().tolist())
-selected_marital = st.sidebar.multiselect("Marital Status", options=marital_options, default=marital_options, key="marital_filter")
+# 5. Marital Status filter
+all_marital_statuses = sorted(df_raw["Marital_Status"].dropna().unique().tolist())
+selected_marital_status = st.sidebar.multiselect(
+    "Select Marital Status:",
+    options=all_marital_statuses,
+    default=all_marital_statuses,
+    key=f"marital_{v_key}"
+)
 
-# ============================================================
-# APPLY FILTER LOGIC
-# ============================================================
-
-filtered = df.copy()
-
-if selected_zones:
-    filtered = filtered[filtered["Zone"].isin(selected_zones)]
+# ==========================================
+# 4. FILTERING LOGIC
+# ==========================================
+if not selected_zones or not selected_states or not selected_age_groups or not selected_marital_status:
+    filtered_df = pd.DataFrame(columns=df_raw.columns)
 else:
-    filtered = filtered.iloc[0:0]
-
-if selected_states:
-    filtered = filtered[filtered["State"].isin(selected_states)]
-else:
-    filtered = filtered.iloc[0:0]
-
-if selected_ages:
-    filtered = filtered[filtered["Age_Group"].isin(selected_ages)]
-else:
-    filtered = filtered.iloc[0:0]
-
-if selected_gender != "All":
-    filtered = filtered[filtered["Gender"] == selected_gender]
-
-if selected_marital:
-    filtered = filtered[filtered["Marital_Status"].isin(selected_marital)]
-else:
-    filtered = filtered.iloc[0:0]
-
-# ============================================================
-# THEME STYLING
-# ============================================================
-
-template = "plotly_dark" if dark_mode else "plotly_white"
-
-if dark_mode:
-    st.markdown(
-        """
-        <style>
-        .stApp { background-color: #0e1117; color: #ffffff; }
-        section[data-testid="stSidebar"] { background-color: #161b22; }
-        h1, h2, h3, h4 { color: #ffffff !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
+    mask = (
+        df_raw["Zone"].isin(selected_zones) &
+        df_raw["State"].isin(selected_states) &
+        df_raw["Age_Group"].isin(selected_age_groups) &
+        df_raw["Marital_Status"].isin(selected_marital_status)
     )
-    card_bg = "#161b22"
-    card_border = "#30363d"
-    title_color = "#8b949e"
-    value_color = "#ffffff"
-else:
-    st.markdown(
-        """
-        <style>
-        .stApp { background-color: #ffffff; color: #111827; }
-        h1, h2, h3, h4 { color: #111827 !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    card_bg = "#f6f8fa"
-    card_border = "#d0d7de"
-    title_color = "#57606a"
-    value_color = "#24292f"
+    if selected_gender != "All":
+        mask = mask & (df_raw["Gender"] == selected_gender)
+        
+    filtered_df = df_raw[mask].copy()
 
-# ============================================================
-# HEADER & KPIS
-# ============================================================
+# ==========================================
+# 5. DASHBOARD HEADER
+# ==========================================
+st.title("Sales Data Analysis Dashboard")
+st.caption("Interactive Retail Sales Performance & Customer Demographics Overview")
+st.markdown("---")
 
-st.title("📊 Sales Data Analysis Dashboard")
-st.caption("Interactive Retail Sales Performance & Demographic Analysis")
+if filtered_df.empty:
+    st.warning("⚠️ No data available for the selected filter combination. Please select at least one valid option for Zone, State, Age Group, and Marital Status.")
+    st.stop()
 
-revenue = filtered["Amount"].sum()
-orders = filtered["Orders"].sum()
-customers = filtered["User_ID"].nunique()
-aov = revenue / orders if orders > 0 else 0.0
+# ==========================================
+# 6. KPI CARDS
+# ==========================================
+total_revenue = filtered_df["Amount"].sum()
+total_orders = filtered_df["Orders"].sum()
+unique_customers = filtered_df["User_ID"].nunique()
+avg_order_value = total_revenue / total_orders if total_orders > 0 else 0.0
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-def render_kpi_card(column, icon, title, value):
-    with column:
-        st.markdown(
-            f"""
-            <div style="
-                background-color: {card_bg};
-                border: 1px solid {card_border};
-                border-radius: 10px;
-                padding: 16px 20px;
-                margin-bottom: 12px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-            ">
-                <div style="color: {title_color}; font-size: 14px; font-weight: 600; margin-bottom: 8px;">
-                    {icon} {title}
-                </div>
-                <div style="color: {value_color}; font-size: 24px; font-weight: 700; line-height: 1.2;">
-                    {value}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+with kpi1:
+    st.metric(label="Total Revenue", value=f"₹{total_revenue:,.2f}")
 
-render_kpi_card(kpi1, "💰", "Total Revenue", f"₹{revenue:,.2f}")
-render_kpi_card(kpi2, "📦", "Total Orders", f"{int(orders):,}")
-render_kpi_card(kpi3, "👥", "Unique Customers", f"{customers:,}")
-render_kpi_card(kpi4, "🧾", "Average Order Value", f"₹{aov:,.2f}")
+with kpi2:
+    st.metric(label="Total Orders", value=f"{total_orders:,}")
 
-st.divider()
+with kpi3:
+    st.metric(label="Unique Customers", value=f"{unique_customers:,}")
 
-# ============================================================
-# CHARTS SECTION
-# ============================================================
+with kpi4:
+    st.metric(label="Average Order Value (AOV)", value=f"₹{avg_order_value:,.2f}")
 
-if filtered.empty:
-    st.warning("⚠️ No data matches the selected filters. Please adjust your selections in the sidebar.")
-else:
-    # 1. Age Group & Gender
-    st.subheader("👥 Age Group & Gender Analysis")
-    left, right = st.columns(2)
+st.markdown("---")
 
-    age_gender = (
-        filtered.groupby(["Age_Group", "Gender"], as_index=False)
-        .agg(Orders=("Orders", "sum"), Amount=("Amount", "sum"))
-    )
-    gender_colors = {"M": "#1565C0", "F": "#90CAF9"}
+# ==========================================
+# 7. SECTION 1: AGE GROUP & GENDER ANALYSIS
+# ==========================================
+st.subheader("Age Group & Gender Analysis")
+col1, col2 = st.columns(2)
 
-    fig1 = px.bar(
-        age_gender,
-        x="Age_Group",
-        y="Orders",
-        color="Gender",
-        barmode="group",
-        category_orders={"Age_Group": age_order},
-        color_discrete_map=gender_colors,
-        title="Total Orders by Age Group & Gender",
-        template=template,
-    )
-    fig1.update_layout(xaxis_title="Age Group", yaxis_title="Orders", legend_title="Gender")
-    left.plotly_chart(fig1, use_container_width=True)
+gender_color_map = {"M": "#1565C0", "F": "#90CAF9"}
 
-    fig2 = px.bar(
-        age_gender,
-        x="Age_Group",
-        y="Amount",
-        color="Gender",
-        barmode="group",
-        category_orders={"Age_Group": age_order},
-        color_discrete_map=gender_colors,
-        title="Total Revenue (₹) by Age Group & Gender",
-        template=template,
-    )
-    fig2.update_layout(xaxis_title="Age Group", yaxis_title="Amount (₹)", legend_title="Gender")
-    right.plotly_chart(fig2, use_container_width=True)
+# Chart 1: Total Orders by Age Group & Gender
+agg_age_orders = filtered_df.groupby(["Age_Group", "Gender"], as_index=False)["Orders"].sum()
+agg_age_orders["Age_Group"] = pd.Categorical(agg_age_orders["Age_Group"], categories=all_age_groups, ordered=True)
+agg_age_orders = agg_age_orders.sort_values(["Age_Group", "Gender"])
 
-    st.divider()
+fig_age_orders = px.bar(
+    agg_age_orders,
+    x="Age_Group",
+    y="Orders",
+    color="Gender",
+    barmode="group",
+    title="Total Orders by Age Group & Gender",
+    labels={"Age_Group": "Age Group", "Orders": "Total Orders", "Gender": "Gender"},
+    color_discrete_map=gender_color_map,
+    template=plotly_template
+)
+fig_age_orders.update_layout(xaxis_title="Age Group", yaxis_title="Total Orders", legend_title="Gender")
 
-    # 2. Zone & Marital Status
-    st.subheader("📍 Zone & Marital Status Analysis")
-    left, right = st.columns(2)
+with col1:
+    st.plotly_chart(fig_age_orders, use_container_width=True)
 
-    zone_data = (
-        filtered.groupby("Zone", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-    )
-    fig3 = px.pie(
-        zone_data,
-        names="Zone",
-        values="Amount",
-        hole=0.45,
-        title="Zone-wise Revenue Contribution",
-        template=template,
-    )
-    fig3.update_traces(textposition="inside", textinfo="percent")
-    left.plotly_chart(fig3, use_container_width=True)
+# Chart 2: Total Revenue by Age Group & Gender
+agg_age_rev = filtered_df.groupby(["Age_Group", "Gender"], as_index=False)["Amount"].sum()
+agg_age_rev["Age_Group"] = pd.Categorical(agg_age_rev["Age_Group"], categories=all_age_groups, ordered=True)
+agg_age_rev = agg_age_rev.sort_values(["Age_Group", "Gender"])
 
-    marital_data = (
-        filtered.groupby("Marital_Status", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-    )
-    fig4 = px.pie(
-        marital_data,
-        names="Marital_Status",
-        values="Amount",
-        hole=0.45,
-        title="Marital Status Revenue Contribution",
-        template=template,
-    )
-    fig4.update_traces(textposition="inside", textinfo="percent")
-    right.plotly_chart(fig4, use_container_width=True)
+fig_age_rev = px.bar(
+    agg_age_rev,
+    x="Age_Group",
+    y="Amount",
+    color="Gender",
+    barmode="group",
+    title="Total Revenue by Age Group & Gender",
+    labels={"Age_Group": "Age Group", "Amount": "Total Revenue (₹)", "Gender": "Gender"},
+    color_discrete_map=gender_color_map,
+    template=plotly_template
+)
+fig_age_rev.update_layout(xaxis_title="Age Group", yaxis_title="Total Revenue (₹)", legend_title="Gender")
 
-    st.divider()
+with col2:
+    st.plotly_chart(fig_age_rev, use_container_width=True)
 
-    # 3. Sector Performance
-    st.subheader("🏢 Sector Performance")
-    left, right = st.columns(2)
+st.markdown("---")
 
-    sector_data = (
-        filtered.groupby("Sector")
-        .agg(
-            Total_Orders=("Orders", "sum"),
-            Average_Orders=("Orders", "mean"),
-            Total_Amount=("Amount", "sum"),
-        )
-        .reset_index()
-    )
+# ==========================================
+# 8. SECTION 2: ZONE & MARITAL STATUS
+# ==========================================
+st.subheader("Zone & Marital Status Contribution")
+col3, col4 = st.columns(2)
 
-    sector_total_orders = sector_data.sort_values("Total_Orders", ascending=False)
-    fig5 = px.bar(
-        sector_total_orders,
-        x="Sector",
-        y="Total_Orders",
-        title="Sector-wise Total Orders",
-        template=template,
-    )
-    fig5.update_layout(xaxis_title="Sector", yaxis_title="Total Orders", xaxis_tickangle=-45)
-    left.plotly_chart(fig5, use_container_width=True)
+# Chart 3: Zone-wise Revenue Contribution (Donut)
+zone_rev = filtered_df.groupby("Zone", as_index=False)["Amount"].sum()
+fig_zone_donut = px.pie(
+    zone_rev,
+    names="Zone",
+    values="Amount",
+    hole=0.55,
+    title="Zone-wise Revenue Contribution",
+    template=plotly_template,
+    color_discrete_sequence=px.colors.qualitative.Plotly
+)
+fig_zone_donut.update_traces(textposition="inside", textinfo="percent+label")
+fig_zone_donut.update_layout(legend_title="Zone")
 
-    sector_average_orders = sector_data.sort_values("Average_Orders", ascending=False)
-    fig6 = px.bar(
-        sector_average_orders,
-        x="Sector",
-        y="Average_Orders",
-        title="Sector-wise Average Orders per Record",
-        template=template,
-    )
-    fig6.update_layout(xaxis_title="Sector", yaxis_title="Average Orders", xaxis_tickangle=-45)
-    right.plotly_chart(fig6, use_container_width=True)
+with col3:
+    st.plotly_chart(fig_zone_donut, use_container_width=True)
 
-    st.divider()
+# Chart 4: Marital Status Revenue Contribution (Donut)
+marital_rev = filtered_df.groupby("Marital_Status", as_index=False)["Amount"].sum()
+marital_color_map = {"Married": "#5C6BC0", "Single": "#26A69A"}
+fig_marital_donut = px.pie(
+    marital_rev,
+    names="Marital_Status",
+    values="Amount",
+    hole=0.55,
+    title="Marital Status Revenue Contribution",
+    template=plotly_template,
+    color="Marital_Status",
+    color_discrete_map=marital_color_map
+)
+fig_marital_donut.update_traces(textposition="inside", textinfo="percent+label")
+fig_marital_donut.update_layout(legend_title="Marital Status")
 
-    # 4. Top States & Categories by Revenue
-    st.subheader("🏆 Top States & Product Categories")
-    left, right = st.columns(2)
+with col4:
+    st.plotly_chart(fig_marital_donut, use_container_width=True)
 
-    top_states = (
-        filtered.groupby("State", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-        .head(10)
-    )
-    fig7 = px.bar(
-        top_states,
-        x="Amount",
-        y="State",
-        orientation="h",
-        title="Top 10 States by Revenue (₹)",
-        template=template,
-    )
-    fig7.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="Amount (₹)", yaxis_title="State")
-    left.plotly_chart(fig7, use_container_width=True)
+st.markdown("---")
 
-    top_products_rev = (
-        filtered.groupby("Product_Category", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-        .head(10)
-    )
-    fig8 = px.bar(
-        top_products_rev,
-        x="Amount",
-        y="Product_Category",
-        orientation="h",
-        title="Top 10 Product Categories by Revenue (₹)",
-        template=template,
-    )
-    fig8.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="Amount (₹)", yaxis_title="Product Category")
-    right.plotly_chart(fig8, use_container_width=True)
+# ==========================================
+# 9. SECTION 3: SECTOR PERFORMANCE
+# ==========================================
+st.subheader("Sector Performance")
+col5, col6 = st.columns(2)
 
-    st.divider()
+# Chart 5: Sector-wise Total Orders (Horizontal Bar)
+sector_orders = filtered_df.groupby("Sector", as_index=False)["Orders"].sum().sort_values(by="Orders", ascending=True)
 
-    # 5. Product Category Orders
-    st.subheader("🛍️ Product Category Orders")
-    left, right = st.columns(2)
+fig_sector_orders = px.bar(
+    sector_orders,
+    x="Orders",
+    y="Sector",
+    orientation="h",
+    title="Sector-wise Total Orders",
+    labels={"Orders": "Total Orders", "Sector": "Sector"},
+    template=plotly_template,
+    color_discrete_sequence=["#5C6BC0"]
+)
+fig_sector_orders.update_layout(xaxis_title="Total Orders", yaxis_title="Sector")
 
-    product_orders = (
-        filtered.groupby("Product_Category")
-        .agg(
-            Total_Orders=("Orders", "sum"),
-            Average_Orders=("Orders", "mean"),
-        )
-        .reset_index()
-    )
+with col5:
+    st.plotly_chart(fig_sector_orders, use_container_width=True)
 
-    product_total_orders = product_orders.sort_values("Total_Orders", ascending=False).head(10)
-    fig9 = px.bar(
-        product_total_orders,
-        x="Product_Category",
-        y="Total_Orders",
-        title="Top 10 Categories by Total Orders",
-        template=template,
-    )
-    fig9.update_layout(xaxis_title="Product Category", yaxis_title="Total Orders", xaxis_tickangle=-45)
-    left.plotly_chart(fig9, use_container_width=True)
+# Chart 6: Sector-wise Average Orders per Record (Horizontal Bar)
+sector_avg_orders = filtered_df.groupby("Sector", as_index=False)["Orders"].mean().rename(columns={"Orders": "Average_Orders"}).sort_values(by="Average_Orders", ascending=True)
 
-    product_average_orders = product_orders.sort_values("Average_Orders", ascending=False).head(10)
-    fig10 = px.bar(
-        product_average_orders,
-        x="Product_Category",
-        y="Average_Orders",
-        title="Top 10 Categories by Average Orders",
-        template=template,
-    )
-    fig10.update_layout(xaxis_title="Product Category", yaxis_title="Average Orders", xaxis_tickangle=-45)
-    right.plotly_chart(fig10, use_container_width=True)
+fig_sector_avg = px.bar(
+    sector_avg_orders,
+    x="Average_Orders",
+    y="Sector",
+    orientation="h",
+    title="Sector-wise Average Orders per Record",
+    labels={"Average_Orders": "Average Orders per Record", "Sector": "Sector"},
+    template=plotly_template,
+    color_discrete_sequence=["#7E57C2"]
+)
+fig_sector_avg.update_layout(xaxis_title="Average Orders per Record", yaxis_title="Sector")
 
-    st.divider()
+with col6:
+    st.plotly_chart(fig_sector_avg, use_container_width=True)
 
-    # 6. Sector Revenue
-    st.subheader("💰 Sector-wise Total Revenue")
-    sector_amount = (
-        filtered.groupby("Sector", as_index=False)["Amount"]
-        .sum()
-        .sort_values("Amount", ascending=False)
-    )
-    fig11 = px.bar(
-        sector_amount,
-        x="Sector",
-        y="Amount",
-        title="Sector-wise Total Revenue (₹)",
-        template=template,
-    )
-    fig11.update_layout(xaxis_title="Sector", yaxis_title="Amount (₹)", xaxis_tickangle=-45)
-    st.plotly_chart(fig11, use_container_width=True)
+st.markdown("---")
 
-    st.divider()
+# ==========================================
+# 10. SECTION 4: TOP STATES & PRODUCT CATEGORIES BY REVENUE
+# ==========================================
+st.subheader("Top States & Product Categories by Revenue")
+col7, col8 = st.columns(2)
 
-    # 7. Raw Data & Export
-    st.subheader("📋 Filtered Data")
-    with st.expander("Show Raw Data"):
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
-        csv = filtered.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="⬇️ Download Filtered CSV",
-            data=csv,
-            file_name="sales_filtered.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
+# Chart 7: Top 10 States by Revenue (Horizontal Bar)
+top_states_rev = filtered_df.groupby("State", as_index=False)["Amount"].sum().sort_values(by="Amount", ascending=False).head(10)
+top_states_rev = top_states_rev.sort_values(by="Amount", ascending=True)
 
-# ============================================================
-# FOOTER
-# ============================================================
+fig_top_states = px.bar(
+    top_states_rev,
+    x="Amount",
+    y="State",
+    orientation="h",
+    title="Top 10 States by Revenue",
+    labels={"Amount": "Revenue (₹)", "State": "State"},
+    template=plotly_template,
+    color_discrete_sequence=["#42A5F5"]
+)
+fig_top_states.update_layout(xaxis_title="Revenue (₹)", yaxis_title="State")
 
-st.divider()
-st.caption("Sales Data Analysis Dashboard • Built with Streamlit, Pandas & Plotly")
+with col7:
+    st.plotly_chart(fig_top_states, use_container_width=True)
+
+# Chart 8: Top 10 Product Categories by Revenue (Horizontal Bar)
+top_cat_rev = filtered_df.groupby("Product_Category", as_index=False)["Amount"].sum().sort_values(by="Amount", ascending=False).head(10)
+top_cat_rev = top_cat_rev.sort_values(by="Amount", ascending=True)
+
+fig_top_cat_rev = px.bar(
+    top_cat_rev,
+    x="Amount",
+    y="Product_Category",
+    orientation="h",
+    title="Top 10 Product Categories by Revenue",
+    labels={"Amount": "Revenue (₹)", "Product_Category": "Product Category"},
+    template=plotly_template,
+    color_discrete_sequence=["#26A69A"]
+)
+fig_top_cat_rev.update_layout(xaxis_title="Revenue (₹)", yaxis_title="Product Category")
+
+with col8:
+    st.plotly_chart(fig_top_cat_rev, use_container_width=True)
+
+st.markdown("---")
+
+# ==========================================
+# 11. SECTION 5: PRODUCT CATEGORY ORDERS
+# ==========================================
+st.subheader("Product Category Orders Breakdown")
+col9, col10 = st.columns(2)
+
+# Chart 9: Top 10 Categories by Total Orders (Horizontal Bar)
+top_cat_orders = filtered_df.groupby("Product_Category", as_index=False)["Orders"].sum().sort_values(by="Orders", ascending=False).head(10)
+top_cat_orders = top_cat_orders.sort_values(by="Orders", ascending=True)
+
+fig_top_cat_orders = px.bar(
+    top_cat_orders,
+    x="Orders",
+    y="Product_Category",
+    orientation="h",
+    title="Top 10 Categories by Total Orders",
+    labels={"Orders": "Total Orders", "Product_Category": "Product Category"},
+    template=plotly_template,
+    color_discrete_sequence=["#66BB6A"]
+)
+fig_top_cat_orders.update_layout(xaxis_title="Total Orders", yaxis_title="Product Category")
+
+with col9:
+    st.plotly_chart(fig_top_cat_orders, use_container_width=True)
+
+# Chart 10: Top 10 Categories by Average Orders per Record (Horizontal Bar)
+top_cat_avg_orders = filtered_df.groupby("Product_Category", as_index=False)["Orders"].mean().rename(columns={"Orders": "Average_Orders"}).sort_values(by="Average_Orders", ascending=False).head(10)
+top_cat_avg_orders = top_cat_avg_orders.sort_values(by="Average_Orders", ascending=True)
+
+fig_top_cat_avg = px.bar(
+    top_cat_avg_orders,
+    x="Average_Orders",
+    y="Product_Category",
+    orientation="h",
+    title="Top 10 Categories by Average Orders per Record",
+    labels={"Average_Orders": "Average Orders per Record", "Product_Category": "Product Category"},
+    template=plotly_template,
+    color_discrete_sequence=["#FFA726"]
+)
+fig_top_cat_avg.update_layout(xaxis_title="Average Orders per Record", yaxis_title="Product Category")
+
+with col10:
+    st.plotly_chart(fig_top_cat_avg, use_container_width=True)
+
+st.markdown("---")
+
+# ==========================================
+# 12. SECTION 6: SECTOR-WISE TOTAL REVENUE
+# ==========================================
+st.subheader("Sector-wise Total Revenue")
+
+sector_rev = filtered_df.groupby("Sector", as_index=False)["Amount"].sum().sort_values(by="Amount", ascending=True)
+
+fig_sector_rev = px.bar(
+    sector_rev,
+    x="Amount",
+    y="Sector",
+    orientation="h",
+    title="Sector-wise Total Revenue",
+    labels={"Amount": "Total Revenue (₹)", "Sector": "Sector"},
+    template=plotly_template,
+    color_discrete_sequence=["#EC407A"]
+)
+fig_sector_rev.update_layout(xaxis_title="Total Revenue (₹)", yaxis_title="Sector")
+
+st.plotly_chart(fig_sector_rev, use_container_width=True)
+
+st.markdown("---")
+
+# ==========================================
+# 13. SECTION 7: FILTERED RAW DATA & CSV DOWNLOAD
+# ==========================================
+st.subheader("Filtered Raw Data")
+
+with st.expander("Show Raw Data Table", expanded=False):
+    st.dataframe(filtered_df, hide_index=True, use_container_width=True)
+
+@st.cache_data
+def convert_df_to_csv(df_to_convert):
+    return df_to_convert.to_csv(index=False).encode("utf-8")
+
+csv_data = convert_df_to_csv(filtered_df)
+
+st.download_button(
+    label="📥 Download Filtered CSV",
+    data=csv_data,
+    file_name="filtered_sales_data.csv",
+    mime="text/csv",
+    use_container_width=False
+)
+
+# ==========================================
+# 14. FOOTER
+# ==========================================
+st.markdown("<br><hr><center style='color: gray;'>Sales Data Analysis Dashboard | Built with Streamlit, Pandas & Plotly</center>", unsafe_allow_html=True)
