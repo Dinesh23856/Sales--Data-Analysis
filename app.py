@@ -10,7 +10,7 @@ import streamlit as st
 # ============================================================
 
 st.set_page_config(
-    page_title="Sales Dashboard",
+    page_title="Sales Data Analysis Dashboard",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -32,7 +32,10 @@ DATA_FILE = Path(__file__).resolve().parent / "project Data new.xlsx"
 def load_data():
     """Load and clean the sales dataset."""
 
-    # Check whether dataset exists
+    # --------------------------------------------------------
+    # Check dataset
+    # --------------------------------------------------------
+
     if not DATA_FILE.exists():
         st.error(
             f"Dataset not found: '{DATA_FILE.name}'. "
@@ -40,12 +43,16 @@ def load_data():
         )
         st.stop()
 
-    # Read Excel file
+    # --------------------------------------------------------
+    # Read Excel
+    # --------------------------------------------------------
+
     try:
         df = pd.read_excel(
             DATA_FILE,
             engine="openpyxl"
         )
+
     except Exception as exc:
         st.error(
             f"Could not read '{DATA_FILE.name}'. Error: {exc}"
@@ -97,7 +104,7 @@ def load_data():
     )
 
     # --------------------------------------------------------
-    # Check required columns
+    # Required columns
     # --------------------------------------------------------
 
     required_columns = {
@@ -125,6 +132,14 @@ def load_data():
         st.stop()
 
     # --------------------------------------------------------
+    # Remove completely empty rows
+    # --------------------------------------------------------
+
+    df = df.dropna(
+        how="all"
+    ).reset_index(drop=True)
+
+    # --------------------------------------------------------
     # Clean text columns
     # --------------------------------------------------------
 
@@ -148,8 +163,6 @@ def load_data():
     # Clean Marital Status
     # --------------------------------------------------------
 
-    # Keep numeric values intact before converting them
-    # to readable labels.
     df["Marital_Status"] = (
         df["Marital_Status"]
         .replace(
@@ -180,14 +193,6 @@ def load_data():
             errors="coerce"
         ).fillna(0)
 
-    # --------------------------------------------------------
-    # Remove completely empty rows
-    # --------------------------------------------------------
-
-    df = df.dropna(
-        how="all"
-    ).reset_index(drop=True)
-
     return df
 
 
@@ -202,9 +207,9 @@ df = load_data()
 st.sidebar.title("🎛️ Dashboard Filters")
 
 
-# ------------------------------------------------------------
-# Reset Filters
-# ------------------------------------------------------------
+# ============================================================
+# RESET FILTERS
+# ============================================================
 
 if st.sidebar.button(
     "🔄 Reset Filters",
@@ -214,13 +219,13 @@ if st.sidebar.button(
     st.rerun()
 
 
-# ------------------------------------------------------------
-# Dark Mode
-# ------------------------------------------------------------
+# ============================================================
+# DARK MODE
+# ============================================================
 
 dark_mode = st.sidebar.checkbox(
     "🌙 Dark Mode",
-    value=False
+    value=True
 )
 
 
@@ -296,7 +301,6 @@ age_options = [
     if age in available_ages
 ]
 
-# Add any unexpected age groups
 extra_ages = sorted(
     available_ages - set(age_options)
 )
@@ -410,6 +414,10 @@ template = (
 )
 
 
+# ------------------------------------------------------------
+# Dark Theme
+# ------------------------------------------------------------
+
 if dark_mode:
 
     st.markdown(
@@ -420,11 +428,34 @@ if dark_mode:
             background-color: #0e1117;
         }
 
+        /* KPI Cards */
         div[data-testid="stMetric"] {
             background-color: #161b22;
             border: 1px solid #30363d;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 18px;
+            border-radius: 12px;
+        }
+
+        div[data-testid="stMetricLabel"] {
+            color: #ffffff !important;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: #ffffff !important;
+        }
+
+        div[data-testid="stMetricDelta"] {
+            color: #ffffff !important;
+        }
+
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #161b22;
+        }
+
+        /* Headers */
+        h1, h2, h3 {
+            color: #ffffff;
         }
 
         </style>
@@ -432,17 +463,39 @@ if dark_mode:
         unsafe_allow_html=True,
     )
 
+
+# ------------------------------------------------------------
+# Light Theme
+# ------------------------------------------------------------
+
 else:
 
     st.markdown(
         """
         <style>
 
+        .stApp {
+            background-color: #ffffff;
+        }
+
+        /* KPI Cards */
         div[data-testid="stMetric"] {
             background-color: #f8f9fa;
             border: 1px solid #e5e7eb;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 18px;
+            border-radius: 12px;
+        }
+
+        div[data-testid="stMetricLabel"] {
+            color: #374151 !important;
+        }
+
+        div[data-testid="stMetricValue"] {
+            color: #111827 !important;
+        }
+
+        div[data-testid="stMetricDelta"] {
+            color: #374151 !important;
         }
 
         </style>
@@ -465,7 +518,7 @@ st.caption(
 
 
 # ============================================================
-# KPI CARDS
+# KPI CALCULATIONS
 # ============================================================
 
 revenue = filtered["Amount"].sum()
@@ -480,6 +533,10 @@ aov = (
     else 0
 )
 
+
+# ============================================================
+# KPI CARDS
+# ============================================================
 
 c1, c2, c3, c4 = st.columns(4)
 
@@ -551,7 +608,10 @@ else:
     }
 
 
-    # Orders
+    # --------------------------------------------------------
+    # Total Orders by Age Group & Gender
+    # --------------------------------------------------------
+
     fig1 = px.bar(
         age_gender,
         x="Age_Group",
@@ -566,13 +626,22 @@ else:
         template=template,
     )
 
+    fig1.update_layout(
+        xaxis_title="Age Group",
+        yaxis_title="Orders",
+        legend_title="Gender",
+    )
+
     left.plotly_chart(
         fig1,
         use_container_width=True
     )
 
 
-    # Revenue
+    # --------------------------------------------------------
+    # Total Revenue by Age Group & Gender
+    # --------------------------------------------------------
+
     fig2 = px.bar(
         age_gender,
         x="Age_Group",
@@ -585,6 +654,12 @@ else:
         color_discrete_map=gender_colors,
         title="Total Revenue (₹) by Age Group & Gender",
         template=template,
+    )
+
+    fig2.update_layout(
+        xaxis_title="Age Group",
+        yaxis_title="Amount (₹)",
+        legend_title="Gender",
     )
 
     right.plotly_chart(
@@ -607,7 +682,10 @@ else:
     left, right = st.columns(2)
 
 
+    # --------------------------------------------------------
     # Zone Revenue
+    # --------------------------------------------------------
+
     zone_data = (
         filtered
         .groupby(
@@ -631,6 +709,11 @@ else:
         template=template,
     )
 
+    fig3.update_traces(
+        textposition="inside",
+        textinfo="percent"
+    )
+
 
     left.plotly_chart(
         fig3,
@@ -638,7 +721,10 @@ else:
     )
 
 
-    # Marital Revenue
+    # --------------------------------------------------------
+    # Marital Status Revenue
+    # --------------------------------------------------------
+
     marital_data = (
         filtered
         .groupby(
@@ -660,6 +746,11 @@ else:
         hole=0.45,
         title="Marital Status Revenue Contribution",
         template=template,
+    )
+
+    fig4.update_traces(
+        textposition="inside",
+        textinfo="percent"
     )
 
 
@@ -695,7 +786,10 @@ else:
     )
 
 
-    # Total Orders
+    # --------------------------------------------------------
+    # Sector Total Orders
+    # --------------------------------------------------------
+
     sector_total_orders = (
         sector_data
         .sort_values(
@@ -713,9 +807,10 @@ else:
         template=template,
     )
 
-
     fig5.update_layout(
-        xaxis_tickangle=-45
+        xaxis_title="Sector",
+        yaxis_title="Total Orders",
+        xaxis_tickangle=-45,
     )
 
 
@@ -725,7 +820,10 @@ else:
     )
 
 
-    # Average Orders
+    # --------------------------------------------------------
+    # Sector Average Orders
+    # --------------------------------------------------------
+
     sector_average_orders = (
         sector_data
         .sort_values(
@@ -743,9 +841,10 @@ else:
         template=template,
     )
 
-
     fig6.update_layout(
-        xaxis_tickangle=-45
+        xaxis_title="Sector",
+        yaxis_title="Average Orders",
+        xaxis_tickangle=-45,
     )
 
 
@@ -769,7 +868,10 @@ else:
     left, right = st.columns(2)
 
 
+    # --------------------------------------------------------
     # Top 10 States
+    # --------------------------------------------------------
+
     top_states = (
         filtered
         .groupby(
@@ -794,11 +896,12 @@ else:
         template=template,
     )
 
-
     fig7.update_layout(
         yaxis=dict(
             autorange="reversed"
-        )
+        ),
+        xaxis_title="Amount (₹)",
+        yaxis_title="State",
     )
 
 
@@ -808,7 +911,10 @@ else:
     )
 
 
+    # --------------------------------------------------------
     # Top 10 Product Categories
+    # --------------------------------------------------------
+
     product_data = (
         filtered
         .groupby(
@@ -833,11 +939,12 @@ else:
         template=template,
     )
 
-
     fig8.update_layout(
         yaxis=dict(
             autorange="reversed"
-        )
+        ),
+        xaxis_title="Amount (₹)",
+        yaxis_title="Product Category",
     )
 
 
@@ -865,163 +972,4 @@ else:
         filtered
         .groupby("Product_Category")
         .agg(
-            Total_Orders=("Orders", "sum"),
-            Average_Orders=("Orders", "mean"),
-        )
-        .reset_index()
-    )
-
-
-    # Top 10 by Total Orders
-    product_total_orders = (
-        product_orders
-        .sort_values(
-            "Total_Orders",
-            ascending=False
-        )
-        .head(10)
-    )
-
-
-    fig9 = px.bar(
-        product_total_orders,
-        x="Product_Category",
-        y="Total_Orders",
-        title="Top 10 Categories by Total Orders",
-        template=template,
-    )
-
-
-    fig9.update_layout(
-        xaxis_tickangle=-45
-    )
-
-
-    left.plotly_chart(
-        fig9,
-        use_container_width=True
-    )
-
-
-    # Top 10 by Average Orders
-    product_average_orders = (
-        product_orders
-        .sort_values(
-            "Average_Orders",
-            ascending=False
-        )
-        .head(10)
-    )
-
-
-    fig10 = px.bar(
-        product_average_orders,
-        x="Product_Category",
-        y="Average_Orders",
-        title="Top 10 Categories by Average Orders",
-        template=template,
-    )
-
-
-    fig10.update_layout(
-        xaxis_tickangle=-45
-    )
-
-
-    right.plotly_chart(
-        fig10,
-        use_container_width=True
-    )
-
-
-    st.divider()
-
-
-    # ========================================================
-    # 6. SECTOR TOTAL REVENUE
-    # ========================================================
-
-    st.subheader(
-        "💰 Sector-wise Total Revenue"
-    )
-
-
-    sector_amount = (
-        filtered
-        .groupby(
-            "Sector",
-            as_index=False
-        )["Amount"]
-        .sum()
-        .sort_values(
-            "Amount",
-            ascending=False
-        )
-    )
-
-
-    fig11 = px.bar(
-        sector_amount,
-        x="Sector",
-        y="Amount",
-        title="Sector-wise Total Revenue (₹)",
-        template=template,
-    )
-
-
-    fig11.update_layout(
-        xaxis_tickangle=-45
-    )
-
-
-    st.plotly_chart(
-        fig11,
-        use_container_width=True
-    )
-
-
-    st.divider()
-
-
-    # ========================================================
-    # 7. FILTERED RAW DATA
-    # ========================================================
-
-    st.subheader(
-        "📋 Filtered Data"
-    )
-
-
-    with st.expander(
-        "Show Raw Data"
-    ):
-
-        st.dataframe(
-            filtered,
-            use_container_width=True
-        )
-
-
-        csv = (
-            filtered
-            .to_csv(index=False)
-            .encode("utf-8")
-        )
-
-
-        st.download_button(
-            label="⬇️ Download Filtered CSV",
-            data=csv,
-            file_name="sales_filtered.csv",
-            mime="text/csv",
-        )
-
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.caption(
-    "Sales Data Analysis Dashboard • "
-    "Built with Streamlit, Pandas & Plotly"
-)
+       
