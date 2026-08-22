@@ -1,4 +1,4 @@
-# 📊 Sales Data Science Project
+# 📊 Sales Data Analysis
 
 📌 Project Overview
 
