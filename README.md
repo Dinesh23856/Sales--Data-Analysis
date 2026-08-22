@@ -172,7 +172,7 @@ The analysis helps identify:
 
 Dinesh More
 
-📊 Data Science / Data Analytics Project
+📊 Data Science  Project
 
 ---
 
