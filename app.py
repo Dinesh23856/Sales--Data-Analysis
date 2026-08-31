@@ -544,7 +544,7 @@ else:
     )
     fig8.update_layout(
         yaxis=dict(autorange="reversed"),
-        xaxis_title="Amount (₹)",
+        xaxis_title="Amount (₹)"
         yaxis_title="Product Category",
     )
     right.plotly_chart(fig8, width="stretch")
